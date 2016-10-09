@@ -9,19 +9,245 @@
     <meta name="format-detection" content="telephone=no">
 
     <title>Color Four</title>
+    <script src="lib/zepto.min.js"></script>
+    <script src="lib/createjs-2015.11.26.min.js"></script>
 
 </head>
 <style type="text/css">
 
+    body {width:100%; height: 100%; overflow: hidden; background-color: rgba(250, 218, 182, 0.2); background-size: 100% 100%; background-repeat: no-repeat; background-position: center center; position: absolute; border: 0px; padding: 0px; margin: 0px;}
+
+    body>.transparent-mask {width: 100%; height: 100%; position: absolute; opacity: 0; -webkit-transition:opacity 0.36s ease; transition: opacity 0.36s ease; z-index: 2;}
+
+    #Canvas {width: 100%; border: 0px; padding: 0px; margin: 0px; }
+
+
 </style>
 <body>
+    <div class="transparent-mask"></div>
+    <canvas id="Canvas"></canvas>
 
 </body>
 
 <script type="text/javascript">
 
 
+    (function(w){
 
+        var W = 750;
+        var H = $(window).height() * (750/$(window).width())
+
+        // 舞台
+        function Stage(callback) {
+            var self = this;
+            this.W = W;
+            this.H = H;
+            this.init();
+            callback(self);
+
+        }
+
+        Stage.prototype = {
+            constructor : Stage,
+            init : function() {
+                var self = this;
+                var canvas = document.getElementById('Canvas');
+                canvas.setAttribute('width', this.W);
+                canvas.setAttribute('height', this.H);
+                this.stage = new createjs.Stage('Canvas');
+                createjs.Touch.enable(this.stage);
+
+                this.container = new createjs.Container();
+                this.stage.addChild(this.container);                
+
+                createjs.Ticker.timingMode = createjs.Ticker.RAF;
+                createjs.Ticker.setFPS(60);
+                createjs.Ticker.addEventListener("tick", function(){
+                    self.stage.update();
+                });
+            }
+        };
+
+        function Color() {
+            this.Colors = {
+                'red' : '#fa7070',
+                'yellow' : '#fff066',
+                'green' : '#82ed82',
+                'blue' : '#79c1fa'
+            };
+            this.colorArr = ['red', 'yellow', 'green', 'blue'];
+        }
+
+        Color.prototype = {
+            constructor : Color,
+            pick : function(color) {
+                return this.Colors[color];
+            },
+            random : function() {
+                return this.Colors[this.colorArr[Math.floor(Math.random() * 4)]];
+            }
+        }
+
+        function Square(obj) {
+            this.width = 30;
+            this.height = 30;
+            this.regx = this.width/2;
+            this.regy = this.height;
+            this.Color = new Color();
+        }
+
+        Square.prototype = {
+            constructor : Square,
+            createClimber : function(stageobj) {
+                var x = 220;
+                var y = H - 60;
+                var col = 'red';
+                var shape = this.create(x, y, col);
+                return shape;
+            },
+            create : function(x, y, col) {
+                var shape = new createjs.Shape();
+                var color = col ? this.Color.pick(col) : this.Color.random();
+                shape.graphics.beginFill(color).drawRect(0, 0, this.width, this.height);
+                shape.setTransform(x, y, 1, 1, 0, 0, 0, this.regx, this.regy);
+
+                return shape;
+            },
+            changeColor : function(shape) {
+                shape.graphics.clear().beginFill(this.Color.random()).drawRect(0, 0, this.width, this.height);
+            }
+        }
+
+        function Climber(square, container) {
+            this.x = 220;
+            this.y = H - 60;
+            this.color = 'red';
+
+            this.square = square;
+            this.container = container;
+            this.shape;
+
+            this.init();
+        }
+
+        Climber.prototype = {
+            constructor : Climber,
+            init : function() {
+                this.shape = this.square.create(this.x, this.y, this.color);
+                this.container.addChild(this.shape);
+            },
+            jump : function(bufferstand) {
+                var self = this;
+                var coord = bufferstand.addStep();
+                var diff = this.shape.y - coord.y;
+
+                createjs.Tween.get(this.shape, {loop:true})
+                .to({rotation:360}, 400);
+
+                createjs.Tween.get(this.shape)
+                .to({x:coord.x, y: coord.y - 50}, 600)
+                .to({x:coord.x, y: coord.y}, 200)
+                .call(function(){
+                    createjs.Tween.get(self.shape, {override: true})
+                    .to({rotation :0});
+                    bufferstand.createOne();
+                    self.changeColor();
+                });
+
+                if(bufferstand.currStep > 2) {
+                    createjs.Tween.get(this.container)
+                    .wait(400)
+                    .to({y: this.container.y + diff}, 500);
+                }
+            },
+            changeColor : function() {
+                var color = this.square.Color.random();
+                var width = this.square.width;
+                var height = this.square.height;
+                this.shape.graphics.clear().beginFill(color).drawRect(0, 0, width, height);
+            }
+        }
+
+        function BufferStand(container) {
+
+            this.container = container;
+            this.initCount = 3;
+            this.width = 64;
+            this.height = 10;
+            this.regx = this.width/2;
+            this.regy = 0;
+            this.radius = 4;
+            this.color = '#72518a';
+            this.coordArr = [];
+            this.currStep = 0;
+            this.init();
+        }
+
+        BufferStand.prototype = {
+            constructor : BufferStand,
+            init : function() {
+                for(var i = 0;i<this.initCount;i++) {
+                    this.createOne();
+                }
+            },
+            createOne : function(){
+                var coord = this.getNewBSCoord();
+                var shape = new createjs.Shape();
+                shape.graphics.beginFill(this.color).drawRoundRect(0, 0, this.width, this.height, this.radius);
+                this.coordArr.push(coord);
+                this.container.addChild(shape);
+                shape.setTransform(coord.x, coord.y, 1, 1, 0, 0, 0, this.regx, this.regy);
+
+            },
+            getNewBSCoord : function() {
+                if(this.coordArr.length == 0) {
+                    return {x: W * 0.6, y:H - util.randomNum([200, 300])};
+                }else{
+                    var highest = this.coordArr[this.coordArr.length - 1];
+                    var x = util.randomNum([200, W-150]);
+                    var y = highest.y - util.randomNum([200,400]);
+                    return {x:x, y:y};
+                }
+            },
+            addStep : function() {
+                this.currStep++;
+                return this.coordArr[this.currStep-1];
+            }
+        }
+
+        w.createStage = function() {
+            return new Stage(function(self){
+
+                var stage = self.stage;
+                var container = self.container;
+                var square = new Square();
+                var climber = new Climber(square, container);
+                var bufferstand = new BufferStand(container);
+
+                $('body').on('click', '.transparent-mask', function(){
+
+                    climber.jump(bufferstand);
+                });
+
+            });
+        };
+
+        w.util = {
+            randomNum : function(arr) {
+                var n = arr[0];
+                var m = arr[1]
+                var t = m-n+1;
+                var c = Math.floor(Math.random() * t + n)
+                return c;
+            }
+
+        };
+
+
+
+    })(window);
+
+    createStage();
 
 </script>
 </html>
